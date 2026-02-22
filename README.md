@@ -1,3 +1,3 @@
 # site-stages
 Projet collaboratif Web4all
-## Contributeur - Lilian DOUCHÉ
+## Contributeurs - Lilian DOUCHÉ - Lucas BEYE - Lionel DASSI
