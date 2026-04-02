@@ -290,12 +290,37 @@ async function loadEntreprisesSelect(){
     +ents.map(ent=>`<option value="${ent.id}">${e(ent.nom)} – ${e(ent.ville||'')}</option>`).join('');
 }
 
+// ══ PAGINATION ADMIN ══════════════════════════════════════════
+const APAG = 12;
+function aPagSlice(arr, page){ return arr.slice((page-1)*APAG, page*APAG); }
+function aPagHTML(page, total, fn){
+  if(total<=1) return '';
+  let h=`<div class="pagination" style="margin:.75rem 0 0">`;
+  h+=`<button class="pag-btn" ${page===1?'disabled':''} onclick="${fn}(${page-1})">‹</button>`;
+  for(let i=1;i<=total;i++){
+    if(total>7&&i>2&&i<total-1&&Math.abs(i-page)>1){
+      if(i===3||i===total-2) h+=`<span class="pag-ellipsis">…</span>`;
+      continue;
+    }
+    h+=`<button class="pag-btn${i===page?' pag-active':''}" onclick="${fn}(${i})">${i}</button>`;
+  }
+  h+=`<button class="pag-btn" ${page===total?'disabled':''} onclick="${fn}(${page+1})">›</button>`;
+  return h+`</div>`;
+}
+function aPagInsert(tableBodyId, pagId, page, total, fn){
+  let pag=document.getElementById(pagId);
+  if(!pag){ pag=document.createElement('div'); pag.id=pagId; document.getElementById(tableBodyId).closest('table').after(pag); }
+  pag.innerHTML=aPagHTML(page, total, fn);
+}
+
 // ══ OFFRES ════════════════════════════════════════════════════
-async function loadOffres(){
-  const offres=await api({action:'liste_offres'});
+let adminAllOffres=[], adminOffresPage=1;
+function _renderAdminOffresTable(){
   const labels={validee:'Validée',en_attente:'En attente',refusee:'Refusée'};
   const cls   ={validee:'badge-remun',en_attente:'badge-attente',refusee:'statut-refusee'};
-  document.getElementById('offresTbody').innerHTML=offres.map(o=>`
+  const page=aPagSlice(adminAllOffres, adminOffresPage);
+  const totalPages=Math.ceil(adminAllOffres.length/APAG);
+  document.getElementById('offresTbody').innerHTML=page.map(o=>`
     <tr>
       <td><strong>${e(o.titre)}</strong></td>
       <td>${e(o.entreprise_nom||'')}</td>
@@ -309,6 +334,14 @@ async function loadOffres(){
         <button class="btn btn-danger" style="font-size:.72rem;padding:.28rem .65rem" onclick="deleteOffre(${o.id})">🗑</button>
       </td>
     </tr>`).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--muted)">Aucune offre.</td></tr>';
+  aPagInsert('offresTbody','adminOffresPag',adminOffresPage,totalPages,'goAdminOffresPage');
+}
+function goAdminOffresPage(p){ adminOffresPage=p; _renderAdminOffresTable(); }
+
+async function loadOffres(){
+  adminAllOffres=await api({action:'liste_offres'});
+  adminOffresPage=1;
+  _renderAdminOffresTable();
 }
 
 function editOffre(o){
@@ -554,8 +587,7 @@ function renderCands(liste){
             <p style="font-size:.82rem;margin:.2rem 0"><a href="mailto:${e(c.email)}" style="color:var(--accent)">${e(c.email)}</a></p>
             <div style="display:flex;gap:.4rem;margin-top:.75rem;flex-wrap:wrap">
               <a href="../profil.php" target="_blank" class="btn btn-ghost" style="font-size:.75rem;padding:.3rem .7rem">👤 Profil</a>
-              <a href="../messages.php?with=${c.utilisateur_id}&name=${encodeURIComponent((c.prenom||'')+' '+(c.nom||''))}&role=etudiant"
-                 class="btn btn-ghost" style="font-size:.75rem;padding:.3rem .7rem">💬 Message</a>
+
             </div>
             ${c.message?`<div style="margin-top:1rem">
               <p style="font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.4rem">Motivation</p>
