@@ -142,16 +142,34 @@ case 'forgot_password':
     $db->prepare('UPDATE utilisateurs SET reset_token=?, reset_token_expires=? WHERE id=?')
        ->execute([$token, $expires, $user['id']]);
     $resetUrl = SITE_URL . '/reset-password.php?token=' . $token;
-    $to      = $email;
-    $subject = '[Web4All] Réinitialisation de votre mot de passe';
-    $message = "Bonjour " . $user['prenom'] . ",\n\n"
-             . "Vous avez demandé à réinitialiser votre mot de passe.\n\n"
-             . "Cliquez sur ce lien (valable 1 heure) :\n"
-             . $resetUrl . "\n\n"
-             . "Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.\n\n"
-             . "L'équipe Web4All";
-    $headers = "From: noreply@web4all.local\r\nContent-Type: text/plain; charset=UTF-8";
-    mail($to, $subject, $message, $headers);
+
+    $subject  = '[Web4All] Réinitialisation de votre mot de passe';
+    $bodyText = "Bonjour " . $user['prenom'] . ",\n\n"
+              . "Vous avez demandé à réinitialiser votre mot de passe.\n\n"
+              . "Cliquez sur ce lien (valable 1 heure) :\n"
+              . $resetUrl . "\n\n"
+              . "Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.\n\n"
+              . "L'équipe Web4All";
+    $bodyHtml = '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,sans-serif;background:#f5f5f5;padding:2rem">'
+              . '<div style="max-width:520px;margin:auto;background:#fff;border-radius:12px;padding:2rem;box-shadow:0 2px 12px rgba(0,0,0,.08)">'
+              . '<h2 style="color:#e91e8c;margin-top:0">Web4All</h2>'
+              . '<p>Bonjour <strong>' . htmlspecialchars($user['prenom'], ENT_QUOTES, 'UTF-8') . '</strong>,</p>'
+              . '<p>Vous avez demandé à réinitialiser votre mot de passe.</p>'
+              . '<p style="margin:1.5rem 0">'
+              . '<a href="' . htmlspecialchars($resetUrl, ENT_QUOTES, 'UTF-8') . '" '
+              . 'style="background:#e91e8c;color:#fff;padding:.75rem 1.5rem;border-radius:8px;text-decoration:none;font-weight:600">Réinitialiser mon mot de passe</a>'
+              . '</p>'
+              . '<p style="font-size:.85rem;color:#888">Ce lien est valable <strong>1 heure</strong>. Si vous n\'êtes pas à l\'origine de cette demande, ignorez cet email.</p>'
+              . '<hr style="border:none;border-top:1px solid #eee;margin:1.5rem 0">'
+              . '<p style="font-size:.8rem;color:#aaa">L\'équipe Web4All</p>'
+              . '</div></body></html>';
+
+    require_once __DIR__ . '/mailer.php';
+    $mailer  = new Mailer();
+    $sent    = $mailer->send($email, $subject, $bodyText, $bodyHtml);
+    if (!$sent) {
+        error_log("[Web4All] Échec envoi email reset à $email");
+    }
     jsonResponse(['ok'=>true,'msg'=>'Si cet email existe, un lien vous a été envoyé.']);
 
 case 'reset_password':
@@ -160,7 +178,7 @@ case 'reset_password':
     if(!$token || !$newPass) jsonResponse(['ok'=>false,'msg'=>'Données manquantes.'], 400);
     if(strlen($newPass) < 6)  jsonResponse(['ok'=>false,'msg'=>'Mot de passe trop court (min. 6 car.).'], 400);
     $db = getDB();
-    $stmt = $db->prepare('SELECT id FROM utilisateurs WHERE reset_token=? AND reset_token_expires > NOW() AND statut="actif"');
+    $stmt = $db->prepare('SELECT id FROM utilisateurs WHERE reset_token=? AND reset_token_expires > NOW() AND statut IN ("actif","en_attente")');
     $stmt->execute([$token]);
     $user = $stmt->fetch();
     if(!$user) jsonResponse(['ok'=>false,'msg'=>'Lien invalide ou expiré. Refaites une demande.'], 400);

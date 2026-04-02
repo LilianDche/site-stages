@@ -80,6 +80,7 @@ switch ($action) {
 
         if (!$destId)  jsonResponse(['ok'=>false,'msg'=>'Destinataire manquant.'], 400);
         if (!$contenu) jsonResponse(['ok'=>false,'msg'=>'Message vide.'], 400);
+        if (strlen($contenu) > 2000) jsonResponse(['ok'=>false,'msg'=>'Message trop long (max 2000 caractères).'], 400);
         if ($destId === $myId) jsonResponse(['ok'=>false,'msg'=>'Vous ne pouvez pas vous écrire à vous-même.'], 400);
 
         // Vérifier que le destinataire existe et est actif

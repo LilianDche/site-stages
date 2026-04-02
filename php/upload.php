@@ -26,7 +26,7 @@ $stmt->execute([$user['id'], $offreId]);
 $cand = $stmt->fetch();
 if (!$cand) jsonResponse(['ok'=>false,'msg'=>'Soumettez d\'abord votre candidature.'], 400);
 
-const MAX_SIZE   = 2 * 1024 * 1024; // 2 Mo
+const MAX_SIZE   = 20 * 1024 * 1024; // 20 Mo
 const ALLOWED    = ['application/pdf'];
 const ALLOWED_EXT= ['pdf'];
 
