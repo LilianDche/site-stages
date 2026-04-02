@@ -61,47 +61,40 @@ const API = {
     pilotes:     _BASE+'/php/pilotes.php',
 };
 
-async function apiPost(url,data){ const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}); return r.json(); }
-async function apiGet(url,params={}){ const qs=new URLSearchParams(params).toString(); return (await fetch(qs?`${url}?${qs}`:url)).json(); }
+async function apiPost(url,data){
+    try{
+        const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+        if(!r.ok && r.status===0) throw new Error('network');
+        return r.json();
+    }catch(err){
+        console.warn('apiPost error',url,err);
+        return {ok:false,msg:'Erreur réseau. Vérifiez que le serveur est démarré.'};
+    }
+}
+async function apiGet(url,params={}){
+    try{
+        const qs=new URLSearchParams(params).toString();
+        const r=await fetch(qs?`${url}?${qs}`:url);
+        if(!r.ok && r.status===0) throw new Error('network');
+        return r.json();
+    }catch(err){
+        console.warn('apiGet error',url,err);
+        return null;
+    }
+}
 function e(str){ const d=document.createElement('div'); d.textContent=str??''; return d.innerHTML; }
 
 // ── AUTH ──────────────────────────────────────────────────────
 let currentUser=null;
 
 async function loadUser(){
-    const d=await apiGet(API.auth,{action:'me'});
-    currentUser=d.ok?d.user:null;
+    try{
+        const d=await apiGet(API.auth,{action:'me'});
+        currentUser=d&&d.ok?d.user:null;
+    }catch{ currentUser=null; }
     updateNavAuth();
     applyTheme(localStorage.getItem('w4a_theme')||'dark');
-    if(currentUser){ refreshMsgBadge(); injectMsgFab(); }
-}
-
-function injectMsgFab(){
-    if(document.getElementById('msgFab')) return;
-    const fab=document.createElement('a');
-    fab.id='msgFab';
-    fab.href=_BASE+'/messages.php';
-    fab.title='Messagerie';
-    fab.innerHTML=`<span style="font-size:1.3rem">💬</span><span class="msg-fab-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:#e91e8c;color:#fff;font-size:.6rem;font-weight:700;padding:.1rem .38rem;border-radius:100px;min-width:18px;text-align:center;line-height:1.4"></span>`;
-    fab.style.cssText='position:fixed;bottom:1.75rem;right:1.75rem;width:52px;height:52px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(0,0,0,.35);z-index:1000;text-decoration:none;transition:transform .2s,box-shadow .2s;';
-    fab.addEventListener('mouseenter',()=>{fab.style.transform='scale(1.1)';fab.style.boxShadow='0 6px 28px rgba(0,0,0,.4)';});
-    fab.addEventListener('mouseleave',()=>{fab.style.transform='';fab.style.boxShadow='0 4px 20px rgba(0,0,0,.35)';});
-    document.body.appendChild(fab);
-}
-async function refreshMsgBadge(){
-    try{
-        const r=await fetch(_BASE+'/php/messages.php?action=nb_non_lus');
-        const d=await r.json();
-        const nb=d.nb||0;
-        // Badge FAB
-        const fabBadge=document.querySelector('.msg-fab-badge');
-        if(fabBadge){ fabBadge.textContent=nb; fabBadge.style.display=nb>0?'block':'none'; }
-        // Anciens badges nav (fallback)
-        document.querySelectorAll('.msg-nav-badge').forEach(el=>{
-            el.textContent=nb; el.style.display=nb>0?'inline-flex':'none';
-        });
-    }catch{}
-}
+    }
 
 async function doLogout(){
     await apiPost(API.auth,{action:'logout'});
@@ -179,6 +172,7 @@ function initRoleSelector(){
 async function loadPromotions(){
     const sel=document.getElementById('registerPromo'); if(!sel)return;
     const promos=await apiGet(API.promotions,{action:'liste'});
+    if(!Array.isArray(promos)){ sel.innerHTML='<option value="">— Erreur chargement —</option>'; return; }
     sel.innerHTML='<option value="">— Sélectionner une promotion —</option>'
         +promos.map(p=>`<option value="${p.id}">${e(p.nom)} (${p.annee})</option>`).join('');
 }
@@ -186,6 +180,7 @@ async function loadPromotions(){
 async function loadEntreprisesInscription(){
     const sel=document.getElementById('registerEntrepriseSelect'); if(!sel)return;
     const ents=await apiGet(API.entreprises,{action:'liste'});
+    if(!Array.isArray(ents)){ sel.innerHTML='<option value="">— Erreur chargement —</option>'; return; }
     sel.innerHTML=
         '<option value="">— Choisir une entreprise —</option>'
         +'<option value="__autre__">✏️ Autre (nouvelle entreprise)</option>'
@@ -204,6 +199,7 @@ window.onEntrepriseSelectChange = function(){
 async function loadCompetencesFilter(){
     const sel=document.getElementById('filterCompetence'); if(!sel)return;
     const comps=await apiGet(API.competences);
+    if(!Array.isArray(comps)){ return; }
     const groups={};
     comps.forEach(c=>{(groups[c.categorie||'Autre']??=[]).push(c);});
     sel.innerHTML='<option value="">Compétence</option>'
@@ -212,17 +208,36 @@ async function loadCompetencesFilter(){
         ).join('');
 }
 
-// ── AFFICHAGE OFFRES ──────────────────────────────────────────
+// ── PAGINATION OFFRES ─────────────────────────────────────────
+const OFFRES_PAR_PAGE = 12;
+let offresPageCourante = 1;
+let offresListeComplète = [];
+
 function renderOffres(liste){
+    offresListeComplète = liste;
+    offresPageCourante = 1;
+    _afficherPageOffres();
+}
+
+function _afficherPageOffres(){
     const container=document.getElementById('offresContainer');
     const stats    =document.getElementById('statsText');
     if(!container)return;
-    if(stats) stats.innerHTML=`<strong>${liste.length}</strong> offre${liste.length!==1?'s':''} disponible${liste.length!==1?'s':''}`;
-    if(!liste.length){
+    const total = offresListeComplète.length;
+    const totalPages = Math.ceil(total / OFFRES_PAR_PAGE);
+    const debut = (offresPageCourante - 1) * OFFRES_PAR_PAGE;
+    const page  = offresListeComplète.slice(debut, debut + OFFRES_PAR_PAGE);
+
+    if(stats) stats.innerHTML=`<strong>${total}</strong> offre${total!==1?'s':''} disponible${total!==1?'s':''}`;
+
+    if(!total){
         container.innerHTML=`<div class="empty-state"><span class="empty-icon">🔍</span><p>Aucune offre trouvée.</p></div>`;
+        // Supprimer pagination éventuelle
+        const old=document.getElementById('offresPagination'); if(old)old.remove();
         return;
     }
-    container.innerHTML=liste.map(o=>`
+
+    container.innerHTML=page.map(o=>`
         <article class="offre-card" onclick="window.location.href='offre.php?id=${o.id}'" style="cursor:pointer">
             <h2>${e(o.titre)}</h2>
             <p class="offre-entreprise"><a href="entreprise.php?id=${o.entreprise_id||''}" onclick="event.stopPropagation()" style="color:var(--muted);text-decoration:none" onmouseover="this.style.color='var(--amber)'" onmouseout="this.style.color='var(--muted)'">${e(o.entreprise)}</a></p>
@@ -244,6 +259,15 @@ function renderOffres(liste){
             </div>
         </article>
     `).join('');
+
+    // Rendre/mettre à jour la pagination
+    let pag=document.getElementById('offresPagination');
+    if(!pag){
+        pag=document.createElement('div');
+        pag.id='offresPagination';
+        container.parentNode.insertBefore(pag, container.nextSibling);
+    }
+    pag.innerHTML = totalPages<=1 ? '' : _buildPagination(offresPageCourante, totalPages, 'goPageOffres');
 }
 
 // ── CHARGEMENT OFFRES ─────────────────────────────────────────
@@ -258,6 +282,28 @@ async function chargerOffres(params={}){
     } catch{
         c.innerHTML=`<div class="empty-state"><span class="empty-icon">⚠️</span><p>Vérifiez que XAMPP est démarré.</p></div>`;
     }
+}
+
+// ── HELPERS PAGINATION ────────────────────────────────────────
+function _buildPagination(current, total, fnName){
+    let html=`<div class="pagination">`;
+    html+=`<button class="pag-btn" ${current===1?'disabled':''} onclick="${fnName}(${current-1})">‹</button>`;
+    for(let i=1;i<=total;i++){
+        if(total>7 && i>2 && i<total-1 && Math.abs(i-current)>1){
+            if(i===3||i===total-2) html+=`<span class="pag-ellipsis">…</span>`;
+            continue;
+        }
+        html+=`<button class="pag-btn${i===current?' pag-active':''}" onclick="${fnName}(${i})">${i}</button>`;
+    }
+    html+=`<button class="pag-btn" ${current===total?'disabled':''} onclick="${fnName}(${current+1})">›</button>`;
+    html+=`</div>`;
+    return html;
+}
+
+function goPageOffres(page){
+    offresPageCourante=page;
+    _afficherPageOffres();
+    document.getElementById('offresContainer')?.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 function getFiltres(){
@@ -373,7 +419,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
         const btn=document.getElementById('loginBtn'); btn.disabled=true; btn.textContent='…';
         const res=await apiPost(API.auth,{action:'login',email,password:pass});
         btn.disabled=false; btn.textContent='Se connecter →';
-        if(!res.ok){showAlert('loginError',res.msg,'error');return;}
+        if(!res||!res.ok){showAlert('loginError',(res&&res.msg)||'Erreur de connexion.','error');return;}
         currentUser=res.user;
         showAlert('loginSuccess',`Bienvenue ${res.user.prenom} !`,'success');
         setTimeout(()=>{closeModal();updateNavAuth();location.reload();},900);
@@ -421,7 +467,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
             nom_entreprise:isAutre     ? nomEntLibre : '',
         });
         btn.disabled=false; btn.textContent='Créer mon compte →';
-        if(!res.ok){showAlert('registerError',res.msg,'error');return;}
+        if(!res||!res.ok){showAlert('registerError',(res&&res.msg)||'Erreur lors de la création.','error');return;}
         showAlert('registerSuccess',res.msg+(res.pending?' (compte en attente de validation)':''),'success');
         setTimeout(()=>switchTab('login'),2000);
     });
@@ -450,32 +496,58 @@ document.addEventListener('DOMContentLoaded', async ()=>{
 });
 
 
-// ── GOOGLE MAPS ───────────────────────────────────────────────
-let map,markers=[];
-function initMap(){
-    if(!document.getElementById('map'))return;
-    map=new google.maps.Map(document.getElementById('map'),{
-        zoom:6,center:{lat:48.8,lng:2.3},
-        styles:[
-            {elementType:'geometry',stylers:[{color:'#111'}]},
-            {elementType:'labels.text.fill',stylers:[{color:'#aaa'}]},
-            {featureType:'road',elementType:'geometry',stylers:[{color:'#222'}]},
-            {featureType:'water',elementType:'geometry',stylers:[{color:'#050505'}]},
-            {featureType:'poi',stylers:[{visibility:'off'}]},
-        ]
+// ── LEAFLET (OpenStreetMap) ────────────────────────────────────
+let map, markers = [];
+
+function initMap() {
+    const mapEl = document.getElementById('map');
+    if (!mapEl) return;
+    if (typeof L === 'undefined') {
+        // Leaflet pas encore chargé, réessayer dans 200ms
+        setTimeout(initMap, 200);
+        return;
+    }
+
+    map = L.map('map', { zoomControl: true }).setView([46.8, 2.3], 6);
+
+    // Tuiles sombre (CartoDB Dark Matter) pour coller au thème
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 19
+    }).addTo(map);
+
+    // Icône personnalisée amber
+    const amberIcon = L.divIcon({
+        className: '',
+        html: '<div style="width:14px;height:14px;border-radius:50%;background:#f59e0b;border:2px solid #000;box-shadow:0 0 6px rgba(245,158,11,.6)"></div>',
+        iconSize: [14, 14],
+        iconAnchor: [7, 7],
+        popupAnchor: [0, -10]
     });
-    window.updateMapMarkers=function(offres){
-        markers.forEach(m=>m.setMap(null));markers=[];
-        (offres||[]).forEach(o=>{
-            if(!o.lat||!o.lng)return;
-            const m=new google.maps.Marker({
-                position:{lat:parseFloat(o.lat),lng:parseFloat(o.lng)},
-                map,title:o.titre,
-                icon:{path:google.maps.SymbolPath.CIRCLE,scale:7,fillColor:'#f59e0b',fillOpacity:1,strokeColor:'#000',strokeWeight:2}
-            });
-            const info=new google.maps.InfoWindow({content:`<div style="font-family:sans-serif;font-size:12px"><strong>${e(o.titre)}</strong><br>${e(o.entreprise||'')} · ${e(o.lieu)}</div>`});
-            m.addListener('click',()=>info.open(map,m));
+
+    window.updateMapMarkers = function(offres) {
+        markers.forEach(m => map.removeLayer(m));
+        markers = [];
+        (offres || []).forEach(o => {
+            if (!o.lat || !o.lng) return;
+            const siteBase = window.SITE_URL || _BASE;
+            const popupHtml = `
+                <div style="font-family:'Outfit',sans-serif;min-width:180px;max-width:240px;padding:2px 0">
+                    <div style="font-size:12px;font-weight:700;color:#111;line-height:1.3;margin-bottom:4px">${e(o.titre)}</div>
+                    <div style="font-size:11px;color:#555;margin-bottom:2px">🏢 ${e(o.entreprise || '')}</div>
+                    <div style="font-size:11px;color:#555;margin-bottom:8px">📍 ${e(o.lieu)} &nbsp;·&nbsp; ${e(o.type || '')}</div>
+                    <a href="${siteBase}/offre.php?id=${o.id}"
+                       style="display:inline-block;background:#f59e0b;color:#000;font-size:11px;font-weight:700;padding:5px 12px;border-radius:6px;text-decoration:none;letter-spacing:.3px">
+                       Voir l'offre →
+                    </a>
+                </div>`;
+            const m = L.marker([parseFloat(o.lat), parseFloat(o.lng)], { icon: amberIcon, title: o.titre })
+                .bindPopup(popupHtml, { maxWidth: 260, className: 'map-popup' })
+                .addTo(map);
             markers.push(m);
         });
     };
 }
+
+document.addEventListener('DOMContentLoaded', initMap);
