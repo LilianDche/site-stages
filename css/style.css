@@ -396,6 +396,16 @@ h2 {
 .map-section h2 { font-family:'Outfit',sans-serif; letter-spacing:-0.5px; color:#fff; margin-bottom:1rem; }
 #map { width:100%; height:360px; border-radius:var(--r-lg); border:1px solid var(--border); overflow:hidden; }
 
+/* Popup Leaflet personnalisé */
+.map-popup .leaflet-popup-content-wrapper {
+  border-radius: 10px !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,.25) !important;
+  padding: 0 !important;
+  border: 1px solid #e5e7eb;
+}
+.map-popup .leaflet-popup-content { margin: 12px 14px !important; }
+.map-popup .leaflet-popup-tip { background: #fff !important; }
+
 /* ── FORMS ───────────────────────────────────────────────────── */
 .form-card {
   background:var(--surface);
@@ -733,7 +743,9 @@ footer a:hover { color:var(--amber); }
 .entreprise-card h3 { font-family:'Outfit',sans-serif; font-size:1rem; font-weight:600; color:#fff; }
 .entreprise-card .ent-secteur { font-size:0.78rem; color:var(--amber); }
 .entreprise-card .ent-info { font-size:0.8rem; color:var(--muted); }
-.entreprises-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:1rem; }
+.entreprises-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:1rem; }
+@media(max-width:900px){ .entreprises-grid { grid-template-columns:repeat(2,1fr); } }
+@media(max-width:560px){ .entreprises-grid { grid-template-columns:1fr; } }
 
 /* ── CARTE OFFRE CLIQUABLE ───────────────────────────────────── */
 .offre-card[onclick] { cursor: pointer; }
@@ -1195,6 +1207,9 @@ footer a:hover { color:var(--amber); }
 [data-theme="light"] #panel-candidatures,
 [data-theme="light"] #panel-validations,
 [data-theme="light"] .tab-panel { color: #1a0a12; }
+
+/* Titres de l'onglet Validations en mode clair */
+[data-theme="light"] .panel-val-title { color: #1a0a12 !important; }
 
 /* Selects dans les tableaux admin */
 [data-theme="light"] select {
@@ -1929,4 +1944,47 @@ body.page-messages #msgFab { display:none !important; }
 #msgApp {
   flex: 1;
   min-height: 0;
+}
+
+/* ── Pagination ── */
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: .4rem;
+  margin: 2rem 0 1rem;
+  flex-wrap: wrap;
+}
+.pag-btn {
+  min-width: 2.2rem;
+  height: 2.2rem;
+  padding: 0 .6rem;
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: .88rem;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.pag-btn:hover:not(:disabled) {
+  background: var(--amber);
+  color: #000;
+  border-color: var(--amber);
+}
+.pag-btn.pag-active {
+  background: var(--amber);
+  color: #000;
+  border-color: var(--amber);
+  font-weight: 700;
+}
+.pag-btn:disabled {
+  opacity: .35;
+  cursor: default;
+}
+.pag-ellipsis {
+  color: var(--muted);
+  padding: 0 .25rem;
+  line-height: 2.2rem;
 }
