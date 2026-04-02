@@ -221,11 +221,33 @@ function renderComps(){
 function toggleComp(id){ selComps.has(id)?selComps.delete(id):selComps.add(id); renderComps(); }
 
 // ══ OFFRES ════════════════════════════════════════════════════
-async function loadOffres(){
-  const offres=await adminCall({action:'liste_offres_pilote'});
+const PAG = 12; // éléments par page — commun aux 3 tableaux
+let allOffres=[], offresPage=1;
+let allEntsData=[], entsPage=1;
+let allCands=[], candsPage=1;
+
+function pagSlice(arr, page){ return arr.slice((page-1)*PAG, page*PAG); }
+function pagHTML(page, total, fn){
+  if(total<=1) return '';
+  let h=`<div class="pagination" style="margin:.75rem 0 0">`;
+  h+=`<button class="pag-btn" ${page===1?'disabled':''} onclick="${fn}(${page-1})">‹</button>`;
+  for(let i=1;i<=total;i++){
+    if(total>7&&i>2&&i<total-1&&Math.abs(i-page)>1){
+      if(i===3||i===total-2) h+=`<span class="pag-ellipsis">…</span>`;
+      continue;
+    }
+    h+=`<button class="pag-btn${i===page?' pag-active':''}" onclick="${fn}(${i})">${i}</button>`;
+  }
+  h+=`<button class="pag-btn" ${page===total?'disabled':''} onclick="${fn}(${page+1})">›</button>`;
+  return h+`</div>`;
+}
+
+function _renderOffresTable(){
   const labels={validee:'✓ Publiée',en_attente:'⏳ En attente',refusee:'✕ Refusée'};
   const cls   ={validee:'badge-remun',en_attente:'badge-attente',refusee:'statut-refusee'};
-  document.getElementById('offresTbody').innerHTML=offres.map(o=>`
+  const page = pagSlice(allOffres, offresPage);
+  const totalPages = Math.ceil(allOffres.length/PAG);
+  document.getElementById('offresTbody').innerHTML=page.map(o=>`
     <tr>
       <td><strong>${e(o.titre)}</strong></td>
       <td>${e(o.lieu)}</td>
@@ -241,6 +263,17 @@ async function loadOffres(){
         ` : '<span style="font-size:.75rem;color:var(--muted)">— lecture seule</span>'}
       </td>
     </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--muted)">Aucune offre.</td></tr>';
+  // Pagination sous le tableau
+  let pag=document.getElementById('offresPag');
+  if(!pag){ pag=document.createElement('div'); pag.id='offresPag'; document.getElementById('offresTbody').closest('table').after(pag); }
+  pag.innerHTML=pagHTML(offresPage, totalPages, 'goOffresPage');
+}
+function goOffresPage(p){ offresPage=p; _renderOffresTable(); }
+
+async function loadOffres(){
+  allOffres=await adminCall({action:'liste_offres_pilote'});
+  offresPage=1;
+  _renderOffresTable();
 }
 
 function editOffre(o){
@@ -317,9 +350,10 @@ async function deleteOffre(id){
 }
 
 // ══ ENTREPRISES ═══════════════════════════════════════════════
-async function loadEnts(){
-  const ents=await entCall({action:'liste'});
-  document.getElementById('entsTbody').innerHTML=ents.map(ent=>`
+function _renderEntsTable(){
+  const page = pagSlice(allEntsData, entsPage);
+  const totalPages = Math.ceil(allEntsData.length/PAG);
+  document.getElementById('entsTbody').innerHTML=page.map(ent=>`
     <tr>
       <td><strong>${e(ent.nom)}</strong></td>
       <td>${e(ent.secteur||'–')}</td>
@@ -335,6 +369,16 @@ async function loadEnts(){
         ` : '<span style="font-size:.75rem;color:var(--muted)">— lecture seule</span>'}
       </td>
     </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--muted)">Aucune entreprise.</td></tr>';
+  let pag=document.getElementById('entsPag');
+  if(!pag){ pag=document.createElement('div'); pag.id='entsPag'; document.getElementById('entsTbody').closest('table').after(pag); }
+  pag.innerHTML=pagHTML(entsPage, totalPages, 'goEntsPage');
+}
+function goEntsPage(p){ entsPage=p; _renderEntsTable(); }
+
+async function loadEnts(){
+  allEntsData=await entCall({action:'liste'});
+  entsPage=1;
+  _renderEntsTable();
 }
 function editEnt(ent){
   document.getElementById('entId').value    = ent.id;
@@ -418,11 +462,11 @@ async function voirEtudiants(promoId,btn){
 }
 
 // ══ CANDIDATURES ══════════════════════════════════════════════
-async function loadCands(){
-  const cands=await adminCall({action:'liste_candidatures_pilote'});
+function _renderCandsTable(){
   const sLabel={envoyee:'Envoyée',vue:'Vue',acceptee:'Acceptée',refusee:'Refusée'};
-  const sClass={envoyee:'statut-envoyee',vue:'statut-vue',acceptee:'statut-acceptee',refusee:'statut-refusee'};
-  document.getElementById('candsTbody').innerHTML=cands.map(c=>`
+  const page = pagSlice(allCands, candsPage);
+  const totalPages = Math.ceil(allCands.length/PAG);
+  document.getElementById('candsTbody').innerHTML=page.map(c=>`
     <tr>
       <td><strong>${e(c.prenom+' '+c.nom)}</strong><br><small style="color:var(--muted)">${e(c.email)}</small></td>
       <td style="font-size:.82rem"><a href="../offre.php?id=${c.offre_id||''}" style="color:inherit;text-decoration:none">${e(c.offre_titre)}</a></td>
@@ -437,6 +481,16 @@ async function loadCands(){
         </select>
       </td>
     </tr>`).join('')||'<tr><td colspan="5" style="text-align:center;color:var(--muted)">Aucune candidature.</td></tr>';
+  let pag=document.getElementById('candsPag');
+  if(!pag){ pag=document.createElement('div'); pag.id='candsPag'; document.getElementById('candsTbody').closest('table').after(pag); }
+  pag.innerHTML=pagHTML(candsPage, totalPages, 'goCandsPage');
+}
+function goCandsPage(p){ candsPage=p; _renderCandsTable(); }
+
+async function loadCands(){
+  allCands=await adminCall({action:'liste_candidatures_pilote'});
+  candsPage=1;
+  _renderCandsTable();
 }
 async function changeStatut(id,statut){
   const res=await adminCall({action:'statut_candidature',id,statut});
